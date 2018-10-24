@@ -271,7 +271,7 @@ bool IbcHashMap::ibcHashMatch(const Area& lumaArea, std::vector<Position>& cand,
 {
   cand.clear();
 
-  // find the block with least candidates，找到有最少候选的block。将完全匹配的候选参考block塞入到cand中
+  // find the block with least candidates，找到有最少候选的block，将完全匹配的候选参考block塞入到cand中。如果最少候选的block都有完全匹配的参考block，返回true。
   size_t minSize = MAX_UINT;
   unsigned int targetHashOneBlock = 0;
   for (SizeType y = 0; y < lumaArea.height && minSize > 1; y += MIN_PU_SIZE)  //只基于4*4的块进行Hash-based搜索

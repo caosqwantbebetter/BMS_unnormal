@@ -1295,7 +1295,7 @@ end:
 
 
 
-// based on xMotionEstimation
+// based on xMotionEstimation，基于运动估计的local search
 void InterSearch::xIntraBlockCopyEstimation(PredictionUnit& pu, PelUnitBuf& origBuf,
   Mv     *pcMvPred,
   Mv     &rcMv,
@@ -1472,7 +1472,7 @@ bool InterSearch::predIntraBCSearch(CodingUnit& cu, Partitioner& partitioner, co
     //对当前pu进行amvpInfo的建立，建立当前pu的运动信息
     PU::fillMvpCand(pu, REF_PIC_LIST_0, pu.refIdx[REF_PIC_LIST_0], amvpInfo);
 
-    //根据amvpInfo.mvCand[]的横向和纵向数据，填充cMvPred[],首先要进行右移（半像素？？？）
+    //根据amvpInfo.mvCand[],取cMvPred[],首先要进行右移（半像素？？？）
     cMvPred[0].set(amvpInfo.mvCand[0].getHor() >> 2, amvpInfo.mvCand[0].getVer() >> 2); // store in full pel accuracy, shift before use in search
     cMvPred[1].set(amvpInfo.mvCand[1].getHor() >> 2, amvpInfo.mvCand[1].getVer() >> 2);
 
@@ -1481,14 +1481,15 @@ bool InterSearch::predIntraBCSearch(CodingUnit& cu, Partitioner& partitioner, co
     cMv.setZero();
     Distortion cost = 0;
 
-    if (m_pcEncCfg->getIBCHashSearch())   //从配置中读IBCHashSearch为真时，通过hash-based seach方法，找到对应cost
+    if (m_pcEncCfg->getIBCHashSearch())   //从配置中读IBCHashSearch为真时，才可用hash-based seach
     {
+      //如果发现多个参考块和当前块匹配with具有相同的hash key，则计算每个候选block vector的成本时选择最小成本，bvpIdxBest标记索引
       xxIntraBlockCopyHashSearch(pu, cMvPred, iBvpNum, cMv, bvpIdxBest, ibcHashMap);
     }
 
     if (cMv.getHor() == 0 && cMv.getVer() == 0)
     {
-      // if hash search does not work or is not enabled
+      // if hash search does not work or is not enabled。如果hash search没有搜到可用结果，基于xMotionEstimation运动估计进行local search
       PelUnitBuf origBuf = pu.cs->getOrgBuf(pu);
       xIntraBlockCopyEstimation(pu, origBuf, cMvPred, cMv, cost, localSearchRangeX, localSearchRangeY);
     }
