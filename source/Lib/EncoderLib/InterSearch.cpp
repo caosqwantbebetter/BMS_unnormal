@@ -1449,7 +1449,7 @@ void InterSearch::xSetIntraSearchRange(PredictionUnit& pu, Mv& cMvPred, int iRoi
 
 bool InterSearch::predIntraBCSearch(CodingUnit& cu, Partitioner& partitioner, const int localSearchRangeX, const int localSearchRangeY, IbcHashMap& ibcHashMap)
 {
-  // check only no greater than IBC_MAX_CAND_SIZE
+  // check only no greater than IBC_MAX_CAND_SIZE ，只有cu.Y()的宽度和高度都 <= 16像素时才继续下面的搜索
   if (cu.Y().width > IBC_MAX_CAND_SIZE || cu.Y().height > IBC_MAX_CAND_SIZE)
     return false;
   Mv           cMvSrchRngLT;
@@ -1458,9 +1458,9 @@ bool InterSearch::predIntraBCSearch(CodingUnit& cu, Partitioner& partitioner, co
   Mv           cMv;
   Mv           cMvPred;
 
-  for (auto &pu : CU::traversePUs(cu))
+  for (auto &pu : CU::traversePUs(cu))   //对当前的cu，对pu进行遍历
   {
-    m_maxCompIDToPred = MAX_NUM_COMPONENT;
+    m_maxCompIDToPred = MAX_NUM_COMPONENT;   //将需要预测的component的最大数量，设置为3.即假设YUV分量都需要进行预测。
 
     CHECK(pu.cu != &cu, "PU is contained in another CU");
     //////////////////////////////////////////////////////////
@@ -1469,7 +1469,10 @@ bool InterSearch::predIntraBCSearch(CodingUnit& cu, Partitioner& partitioner, co
     pu.cu->imv = 0;// (Int)cu.cs->sps->getSpsNext().getUseIMV(); // set as IMV=1 initially
     Mv    cMv, cMvPred[2];
     AMVPInfo amvpInfo;
+    //对当前pu进行amvpInfo的建立，建立当前pu的运动信息
     PU::fillMvpCand(pu, REF_PIC_LIST_0, pu.refIdx[REF_PIC_LIST_0], amvpInfo);
+
+    //根据amvpInfo.mvCand[]的横向和纵向数据，填充cMvPred[],首先要进行右移（半像素？？？）
     cMvPred[0].set(amvpInfo.mvCand[0].getHor() >> 2, amvpInfo.mvCand[0].getVer() >> 2); // store in full pel accuracy, shift before use in search
     cMvPred[1].set(amvpInfo.mvCand[1].getHor() >> 2, amvpInfo.mvCand[1].getVer() >> 2);
 
@@ -1478,7 +1481,7 @@ bool InterSearch::predIntraBCSearch(CodingUnit& cu, Partitioner& partitioner, co
     cMv.setZero();
     Distortion cost = 0;
 
-    if (m_pcEncCfg->getIBCHashSearch())
+    if (m_pcEncCfg->getIBCHashSearch())   //从配置中读IBCHashSearch为真时，通过hash-based seach方法，找到对应cost
     {
       xxIntraBlockCopyHashSearch(pu, cMvPred, iBvpNum, cMv, bvpIdxBest, ibcHashMap);
     }
@@ -1594,6 +1597,8 @@ void InterSearch::xxIntraBlockCopyHashSearch(PredictionUnit& pu, Mv* mvPred, int
   m_pcRdCost->setCostScale(0);
 
   std::vector<Position> candPos;
+
+  //如果通过hash-based search搜索到的，与当前block完全匹配的参考block不为空时，
   if (ibcHashMap.ibcHashMatch(pu.Y(), candPos, *pu.cs, m_pcEncCfg->getIBCHashSearchMaxCand(), m_pcEncCfg->getIBCHashSearchRange4SmallBlk()))
   {
     unsigned int minCost = MAX_UINT;
@@ -1610,8 +1615,8 @@ void InterSearch::xxIntraBlockCopyHashSearch(PredictionUnit& pu, Mv* mvPred, int
     {
       Position bottomRight = pos->offset(pu.Y().width - 1, pu.Y().height - 1);
       if (pu.cs->isDecomp(*pos, pu.cs->chType) && pu.cs->isDecomp(bottomRight, pu.cs->chType))
-      {
-        Position tmp = *pos - pu.Y().pos();
+      { 
+        Position tmp = *pos - pu.Y().pos();   //tmp是当前block的参考block偏移一个pu.Y(),是上一个pu？？？
         Mv candMv;
         candMv.set(tmp.x, tmp.y);
 
@@ -1620,21 +1625,23 @@ void InterSearch::xxIntraBlockCopyHashSearch(PredictionUnit& pu, Mv* mvPred, int
           continue;
         }
 
-        for (int n = 0; n < numMvPred; n++)
+        for (int n = 0; n < numMvPred; n++)   //遍历可用的预测MV，此处传进来为2，即iBvpNum
         {
-          m_pcRdCost->setPredictor(mvPred[n]);
+          m_pcRdCost->setPredictor(mvPred[n]);   //设置mv对应的predictor
 #if JVET_K0357_AMVR
+          //根据predictor得到所需cost
           unsigned int cost = m_pcRdCost->getBitsOfVectorWithPredictor(candMv.getHor(), candMv.getVer(), 0);
 #else
           UInt cost = m_pcRdCost->getBitsOfVectorWithPredictor(candMv.getHor(), candMv.getVer());
 #endif
-          if (cost < minCost)
+          if (cost < minCost)   //找到最小cost对应的候选block对应的mv，以及predictor数量和mincost
           {
             mv = candMv;
             idxMvPred = n;
             minCost = cost;
           }
 
+          //以下大概是选择cost最小的PredQualPel
           int costQuadPel = MAX_UINT;
           if ((candMv.getHor() % 4 == 0) && (candMv.getVer() % 4 == 0) && (pu.cs->sps->getSpsNext().getImvMode() == IMV_4PEL))
           {

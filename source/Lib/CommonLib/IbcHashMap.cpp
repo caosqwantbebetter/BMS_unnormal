@@ -271,15 +271,15 @@ bool IbcHashMap::ibcHashMatch(const Area& lumaArea, std::vector<Position>& cand,
 {
   cand.clear();
 
-  // find the block with least candidates
+  // find the block with least candidates，找到有最少候选的block。将完全匹配的候选参考block塞入到cand中
   size_t minSize = MAX_UINT;
   unsigned int targetHashOneBlock = 0;
-  for (SizeType y = 0; y < lumaArea.height && minSize > 1; y += MIN_PU_SIZE)
+  for (SizeType y = 0; y < lumaArea.height && minSize > 1; y += MIN_PU_SIZE)  //只基于4*4的块进行Hash-based搜索
   {
     for (SizeType x = 0; x < lumaArea.width && minSize > 1; x += MIN_PU_SIZE)
     {
-      unsigned int hash = m_pos2Hash[lumaArea.pos().y + y][lumaArea.pos().x + x];
-      if (m_hash2Pos[hash].size() < minSize)
+      unsigned int hash = m_pos2Hash[lumaArea.pos().y + y][lumaArea.pos().x + x];   //通过lumaArea中的当前位置映射Hash Key
+      if (m_hash2Pos[hash].size() < minSize)   //找到对应POS数量最少的hash key，即block with least candidates的hash记为targteHashOneBlock;
       {
         minSize = m_hash2Pos[hash].size();
         targetHashOneBlock = hash;
@@ -287,16 +287,17 @@ bool IbcHashMap::ibcHashMatch(const Area& lumaArea, std::vector<Position>& cand,
     }
   }
 
+  //如果targetHashOneBlock对应的候选数量 > 1,check候选列表中是否有和当前block完全匹配的候选
   if (m_hash2Pos[targetHashOneBlock].size() > 1)
   {
-    std::vector<Position>& candOneBlock = m_hash2Pos[targetHashOneBlock];
+    std::vector<Position>& candOneBlock = m_hash2Pos[targetHashOneBlock];   //candOneBlock大概是指目标block的候选列表
 
-    // check whether whole block match
+    // check whether whole block match。遍历候选列表，对于每个候选refBlockPos，check参考block和当前block是否是完全匹配。并且把完全匹配的参考block塞入到cand中
     for (std::vector<Position>::iterator refBlockPos = candOneBlock.begin(); refBlockPos != candOneBlock.end(); refBlockPos++)
     {
-      Position bottomRight = refBlockPos->offset(lumaArea.width - 1, lumaArea.height - 1);
+      Position bottomRight = refBlockPos->offset(lumaArea.width - 1, lumaArea.height - 1);   //bottomRight是指参考的block偏移一个lumaArea的右下角？
       bool wholeBlockMatch = true;
-      if (lumaArea.width > MIN_PU_SIZE || lumaArea.height > MIN_PU_SIZE)
+      if (lumaArea.width > MIN_PU_SIZE || lumaArea.height > MIN_PU_SIZE)   //如果lumaArea.widthblock的宽度或者高度 > 4像素时，基于4*4的块进行扩展
       {
 #if JVET_K0076_CPR
         if (!cs.isDecomp(bottomRight, cs.chType) || bottomRight.x >= m_picWidth || bottomRight.y >= m_picHeight)
@@ -310,12 +311,12 @@ bool IbcHashMap::ibcHashMatch(const Area& lumaArea, std::vector<Position>& cand,
         {
           for (SizeType x = 0; x < lumaArea.width && wholeBlockMatch; x += MIN_PU_SIZE)
           {
-            // whether the reference block and current block has the same hash
+            // whether the reference block and current block has the same hash。check参考block和当前block是否有同样的hash
             wholeBlockMatch &= (m_pos2Hash[lumaArea.pos().y + y][lumaArea.pos().x + x] == m_pos2Hash[refBlockPos->y + y][refBlockPos->x + x]);
           }
         }
       }
-      else
+      else   //如果block已经 < 4*4，不用再划分
       {
 #if JVET_K0076_CPR
         if (abs(refBlockPos->x - lumaArea.x) > searchRange4SmallBlk || abs(refBlockPos->y - lumaArea.y) > searchRange4SmallBlk || !cs.isDecomp(bottomRight, cs.chType))
@@ -326,7 +327,7 @@ bool IbcHashMap::ibcHashMatch(const Area& lumaArea, std::vector<Position>& cand,
           continue;
         }
       }
-      if (wholeBlockMatch)
+      if (wholeBlockMatch)  //将完全匹配的候选参考block塞入到cand中
       {
         cand.push_back(*refBlockPos);
         if (cand.size() > maxCand)
