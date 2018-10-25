@@ -236,13 +236,14 @@ void IbcHashMap::xxBuildPicHashMap(const PelUnitBuf& pic)
         hashValue = xxCalcBlockHash(&pelCr[chromaX], pic.Cr().stride, chromaMinBlkWidth, chromaMinBlkHeight, hashValue);
       }
 
-      // hash table
+      // hash table。最终得到hash表，一个是通过hash映射position，另一个通过position映射hash key
       m_hash2Pos[hashValue].push_back(pos);
       m_pos2Hash[pos.y][pos.x] = hashValue;
     }
   }
 }
 
+//根据亮度色度编码方式建立hash table
 void IbcHashMap::rebuildPicHashMap(const PelUnitBuf& pic)
 {
   m_hash2Pos.clear();
@@ -253,7 +254,7 @@ void IbcHashMap::rebuildPicHashMap(const PelUnitBuf& pic)
     xxBuildPicHashMap<CHROMA_400>(pic);
     break;
   case CHROMA_420:
-    xxBuildPicHashMap<CHROMA_420>(pic);
+    xxBuildPicHashMap<CHROMA_420>(pic);   //建立hash table：m_hash2Pos和 m_POS2hash
     break;
   case CHROMA_422:
     xxBuildPicHashMap<CHROMA_422>(pic);
@@ -287,12 +288,12 @@ bool IbcHashMap::ibcHashMatch(const Area& lumaArea, std::vector<Position>& cand,
     }
   }
 
-  //如果targetHashOneBlock对应的候选数量 > 1,check候选列表中是否有和当前block完全匹配的候选
+  //targetHashOneBlock对应的候选数量 > 1,才继续进行check
   if (m_hash2Pos[targetHashOneBlock].size() > 1)
   {
     std::vector<Position>& candOneBlock = m_hash2Pos[targetHashOneBlock];   //candOneBlock大概是指目标block的候选列表
 
-    // check whether whole block match。遍历候选列表，对于每个候选refBlockPos，check参考block和当前block是否是完全匹配。并且把完全匹配的参考block塞入到cand中
+    // check whether whole block match。遍历候选列表，对于每个候选refBlockPos，check参考block和当前block是否是完全匹配。
     for (std::vector<Position>::iterator refBlockPos = candOneBlock.begin(); refBlockPos != candOneBlock.end(); refBlockPos++)
     {
       Position bottomRight = refBlockPos->offset(lumaArea.width - 1, lumaArea.height - 1);   //bottomRight是指参考的block偏移一个lumaArea的右下角？
@@ -318,7 +319,7 @@ bool IbcHashMap::ibcHashMatch(const Area& lumaArea, std::vector<Position>& cand,
       }
       else   //如果block已经 < 4*4，不用再划分
       {
-#if JVET_K0076_CPR
+#if JVET_K0076_CPR  //判断是否完全匹配的算法，即以searchRange4SmallBlk为判断阈值
         if (abs(refBlockPos->x - lumaArea.x) > searchRange4SmallBlk || abs(refBlockPos->y - lumaArea.y) > searchRange4SmallBlk || !cs.isDecomp(bottomRight, cs.chType))
 #else
         if (abs(refBlockPos->x - lumaArea.x) > searchRange4SmallBlk || abs(refBlockPos->y - lumaArea.y) > searchRange4SmallBlk || !cs.isDecomp(bottomRight, CHANNEL_TYPE_LUMA))
@@ -343,19 +344,19 @@ bool IbcHashMap::ibcHashMatch(const Area& lumaArea, std::vector<Position>& cand,
 
 int IbcHashMap::getHashHitRatio(const Area& lumaArea)
 {
-  int maxX = std::min((int)(lumaArea.x + lumaArea.width), m_picWidth);
+  int maxX = std::min((int)(lumaArea.x + lumaArea.width), m_picWidth);   //限制lumaArea只能在当前图片
   int maxY = std::min((int)(lumaArea.y + lumaArea.height), m_picHeight);
   int hit = 0, total = 0;
-  for (int y = lumaArea.y; y < maxY; y += MIN_PU_SIZE)
+  for (int y = lumaArea.y; y < maxY; y += MIN_PU_SIZE)   //基于4*4大小的块
   {
     for (int x = lumaArea.x; x < maxX; x += MIN_PU_SIZE)
     {
       const unsigned int hash = m_pos2Hash[y][x];
-      hit += (m_hash2Pos[hash].size() > 1);
-      total++;
+      hit += (m_hash2Pos[hash].size() > 1);   //hit标记hash key映射 > 1的个数，即hit表示block候选>1的数量
+      total++;   //total标记基于4*4大小的块，全部块的数量
     }
   }
-  return 100 * hit / total;
+  return 100 * hit / total;   //候选 > 1 的block，在全部block中的占比
 }
 
 

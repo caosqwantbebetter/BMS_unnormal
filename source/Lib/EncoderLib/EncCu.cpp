@@ -347,7 +347,7 @@ void EncCu::compressCtu( CodingStructure& cs, const UnitArea& area, const unsign
 #if JVET_K0076_CPR
   if (m_pcEncCfg->getIBCHashSearch() && ctuRsAddr == 0)
   {
-    m_ibcHashMap.rebuildPicHashMap(cs.picture->getOrigBuf());
+    m_ibcHashMap.rebuildPicHashMap(cs.picture->getOrigBuf());   //根据亮度和色度的编码方式(420)，建立hash table: m_hash2Pos, m_Pos2hash
   }
 #endif
   m_modeCtrl->initCTUEncoding( *cs.slice );
@@ -377,13 +377,13 @@ void EncCu::compressCtu( CodingStructure& cs, const UnitArea& area, const unsign
   m_ctuIbcSearchRangeY = m_pcEncCfg->getIBCLocalSearchRangeY();
   if (m_pcEncCfg->getIBCMode() && m_pcEncCfg->getIBCHashSearch() && (m_pcEncCfg->getIBCFastMethod() & IBC_FAST_METHOD_ADAPTIVE_SEARCHRANGE))
   {
-    const int hashHitRatio = m_ibcHashMap.getHashHitRatio(area.Y()); // in percent
-    if (hashHitRatio < 5)
+    const int hashHitRatio = m_ibcHashMap.getHashHitRatio(area.Y()); // in percent。返回的是候选size>1的block，在全部block数量中的占比
+    if (hashHitRatio < 5)   //如果候选size>1的block占比小于5%，搜索范围减半？？？
     {
       m_ctuIbcSearchRangeX >>= 1;
       m_ctuIbcSearchRangeY >>= 1;
     }
-    if (cs.slice->getNumRefIdx(REF_PIC_LIST_0) > 1)
+    if (cs.slice->getNumRefIdx(REF_PIC_LIST_0) > 1)   //如果当前slice有多个参考时，搜索范围减半？？？
     {
       m_ctuIbcSearchRangeX >>= 1;
       m_ctuIbcSearchRangeY >>= 1;
@@ -760,7 +760,7 @@ void EncCu::xCompressCU( CodingStructure *&tempCS, CodingStructure *&bestCS, Par
     {
       xCheckIntraPCM( tempCS, bestCS, partitioner, currTestMode );
     }
-#if JVET_K0076_CPR
+#if JVET_K0076_CPR   //是编码器CPR模式的入口
     else if (currTestMode.type == ETM_IBC)
     {
       xCheckRDCostIntraBC(tempCS, bestCS, partitioner, currTestMode);
@@ -2355,12 +2355,12 @@ void EncCu::xCheckRDCostIntraBC(CodingStructure *&tempCS, CodingStructure *&best
 #if HEVC_TILES_WPP
   cu.tileIdx = tempCS->picture->tileMap->getTileIdxMap(tempCS->area.lumaPos());
 #endif
-  cu.skip = false;
+  cu.skip = false;   //设置skip 为false
   cu.partSize = encTestMode.partSize;
-  cu.predMode = MODE_INTER;
+  cu.predMode = MODE_INTER;   //预测模式选择帧间预测
   cu.transQuantBypass = encTestMode.lossless;
   cu.chromaQpAdj = cu.transQuantBypass ? 0 : m_cuChromaQpOffsetIdxPlus1;
-  cu.qp = encTestMode.qp;
+  cu.qp = encTestMode.qp;   //选择当前cu的qp值
   cu.ibc = true;
 #if JEM_TOOLS
   cu.imv = 0;
@@ -2368,10 +2368,10 @@ void EncCu::xCheckRDCostIntraBC(CodingStructure *&tempCS, CodingStructure *&best
   CU::addPUs(cu);
 
   PredictionUnit& pu = *cu.firstPU;
-  pu.intraDir[0] = DC_IDX; // set intra pred for ibc block
+  pu.intraDir[0] = DC_IDX; // set intra pred for ibc block。对ibc block设置帧内预测模式
   pu.intraDir[1] = PLANAR_IDX; // set intra pred for ibc block
 
-  pu.interDir = 1; // use list 0 for IBC mode
+  pu.interDir = 1; // use list 0 for IBC mode。IBC模式需要使用list 0，后向预测？？？？？
   pu.refIdx[REF_PIC_LIST_0] = pu.cs->slice->getNumRefIdx(REF_PIC_LIST_0) - 1; // last idx in the list
 
 #if JVET_K0076_CPR_DT

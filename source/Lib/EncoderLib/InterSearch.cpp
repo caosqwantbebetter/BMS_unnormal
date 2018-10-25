@@ -1295,7 +1295,8 @@ end:
 
 
 
-// based on xMotionEstimation，基于运动估计的local search
+// based on xMotionEstimation，基于运动估计的local search，和HEVC部分基本没变
+//基本思想就是用TZSearch算法先进行整像素搜索，确定一个局部的最佳值，然后以这个最佳点为中心再进行精度更高的分像素搜索。
 void InterSearch::xIntraBlockCopyEstimation(PredictionUnit& pu, PelUnitBuf& origBuf,
   Mv     *pcMvPred,
   Mv     &rcMv,
@@ -1313,6 +1314,8 @@ void InterSearch::xIntraBlockCopyEstimation(PredictionUnit& pu, PelUnitBuf& orig
 
     int          iRoiWidth = pu.lwidth();
     int          iRoiHeight = pu.lheight();
+
+    //history指当前pu亮度分量记录下的block vector，遍历history，找到distortion最小的block vector
     std::unordered_map<Mv, Distortion>& history = m_ctuRecord[pu.lumaPos()][pu.lumaSize()].bvRecord;
     const unsigned int  lcuWidth = pu.cs->slice->getSPS()->getMaxCUWidth();
     for (std::unordered_map<Mv, Distortion>::iterator p = history.begin(); p != history.end(); p++)
@@ -1332,16 +1335,16 @@ void InterSearch::xIntraBlockCopyEstimation(PredictionUnit& pu, PelUnitBuf& orig
         {
           rcMv = bv;
           ruiCost = p->second;
-          buffered = true;
+          buffered = true;   //如果block vector的distortion比入口传进来的ruicost小，用buffered标记
         }
       }
     }
   }
 
-  if (!buffered)
+  if (!buffered)   //如果block vector的cost没有将传入ruicost替换，需要搜索
   {
-    Mv        cMvSrchRngLT;
-    Mv        cMvSrchRngRB;
+    Mv        cMvSrchRngLT;   //LeftTop
+    Mv        cMvSrchRngRB;   //RightBottom
 #if (JEM_TOOLS || JVET_K0346 || JVET_K_AFFINE) && !REMOVE_MV_ADAPT_PREC
     cMvSrchRngLT.highPrec = false;
     cMvSrchRngRB.highPrec = false;
@@ -1349,18 +1352,19 @@ void InterSearch::xIntraBlockCopyEstimation(PredictionUnit& pu, PelUnitBuf& orig
 
     PelUnitBuf* pBuf = &origBuf;
 
-    //  Search key pattern initialization
+    //  Search key pattern initialization,初始化待搜索PU的首地址，宽度，高度，跨度等等
     CPelBuf  tmpPattern = pBuf->Y();
     CPelBuf* pcPatternKey = &tmpPattern;
 
     m_lumaClpRng = pu.cs->slice->clpRng(COMPONENT_Y);
-    Picture* refPic = pu.cu->slice->getPic();
+    Picture* refPic = pu.cu->slice->getPic();   //参考帧设置为自己
 
     const CPelBuf refBuf = refPic->getRecoBuf(pu.blocks[COMPONENT_Y]);
 
     Mv      cMvPred = *pcMvPred;
 
-    IntTZSearchStruct cStruct;
+
+    IntTZSearchStruct cStruct;   //TZsearch
     cStruct.pcPatternKey = pcPatternKey;
     cStruct.iRefStride = refBuf.stride;
     cStruct.piRefY = refBuf.buf;
@@ -1369,7 +1373,7 @@ void InterSearch::xIntraBlockCopyEstimation(PredictionUnit& pu, PelUnitBuf& orig
 #endif
     cStruct.subShiftMode = 0; // used by intra pattern search function
 
-                              // assume that intra BV is integer-pel precision
+                              // assume that intra BV is integer-pel precision，进行整像素搜索
     xSetIntraSearchRange(pu, cMvPred, pu.lwidth(), pu.lheight(), localSearchRangeX, localSearchRangeY, cMvSrchRngLT, cMvSrchRngRB);
 
     // disable weighted prediction
@@ -1379,7 +1383,7 @@ void InterSearch::xIntraBlockCopyEstimation(PredictionUnit& pu, PelUnitBuf& orig
     m_pcRdCost->setPredictors(pcMvPred);
     m_pcRdCost->setCostScale(0);
 
-    //  Do integer search
+    //  Do integer search，整像素搜索
 
     xIntraPatternSearch(pu, cStruct, rcMv, ruiCost, &cMvSrchRngLT, &cMvSrchRngRB, pcMvPred);
   }
@@ -1592,6 +1596,8 @@ bool InterSearch::predIntraBCSearch(CodingUnit& cu, Partitioner& partitioner, co
   return true;
 }
 
+
+//mvPred是传进来的mv数组，但是函数首先进行HashMatch匹配，只剩余candPos中与每个block可以完全匹配的参考，然后对
 void InterSearch::xxIntraBlockCopyHashSearch(PredictionUnit& pu, Mv* mvPred, int numMvPred, Mv &mv, int& idxMvPred, IbcHashMap& ibcHashMap)
 {
   mv.setZero();
@@ -1599,7 +1605,8 @@ void InterSearch::xxIntraBlockCopyHashSearch(PredictionUnit& pu, Mv* mvPred, int
 
   std::vector<Position> candPos;
 
-  //如果通过hash-based search搜索到的，与当前block完全匹配的参考block不为空时，
+  //对当前pu以4*4块为基本单元，首先根据局hash tabel进行搜索匹配，找到pos对应的Hash key，映射到的pos最少的块记为target block
+  //遍历target block的候选，判断完全匹配的候选数量是否为>0
   if (ibcHashMap.ibcHashMatch(pu.Y(), candPos, *pu.cs, m_pcEncCfg->getIBCHashSearchMaxCand(), m_pcEncCfg->getIBCHashSearchRange4SmallBlk()))
   {
     unsigned int minCost = MAX_UINT;
@@ -1612,9 +1619,10 @@ void InterSearch::xxIntraBlockCopyHashSearch(PredictionUnit& pu, Mv* mvPred, int
     int         iRoiWidth = pu.lwidth();
     int         iRoiHeight = pu.lheight();
 
+    //在hash-based搜索中完全匹配的cand中进行遍历，pos表示参考位置索引
     for (std::vector<Position>::iterator pos = candPos.begin(); pos != candPos.end(); pos++)
     {
-      Position bottomRight = pos->offset(pu.Y().width - 1, pu.Y().height - 1);
+      Position bottomRight = pos->offset(pu.Y().width - 1, pu.Y().height - 1);   //当前参考pu的右下位置
       if (pu.cs->isDecomp(*pos, pu.cs->chType) && pu.cs->isDecomp(bottomRight, pu.cs->chType))
       { 
         Position tmp = *pos - pu.Y().pos();   //tmp是当前block的参考block偏移一个pu.Y(),是上一个pu？？？
@@ -1626,7 +1634,7 @@ void InterSearch::xxIntraBlockCopyHashSearch(PredictionUnit& pu, Mv* mvPred, int
           continue;
         }
 
-        for (int n = 0; n < numMvPred; n++)   //遍历可用的预测MV，此处传进来为2，即iBvpNum
+        for (int n = 0; n < numMvPred; n++)   //遍历可参考的MV，numMvPred传进来为2，即iBvpNum
         {
           m_pcRdCost->setPredictor(mvPred[n]);   //设置mv对应的predictor
 #if JVET_K0357_AMVR
@@ -1635,7 +1643,7 @@ void InterSearch::xxIntraBlockCopyHashSearch(PredictionUnit& pu, Mv* mvPred, int
 #else
           UInt cost = m_pcRdCost->getBitsOfVectorWithPredictor(candMv.getHor(), candMv.getVer());
 #endif
-          if (cost < minCost)   //找到最小cost对应的候选block对应的mv，以及predictor数量和mincost
+          if (cost < minCost)   //找到最小cost对应的候选mv，以及mv索引和mincost
           {
             mv = candMv;
             idxMvPred = n;
