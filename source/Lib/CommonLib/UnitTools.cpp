@@ -2035,25 +2035,25 @@ bool PU::isDiffMER(const PredictionUnit &pu1, const PredictionUnit &pu2)
 }
 
 #if JVET_K0076_CPR
-void PU::getIntraBCMVPsEncOnly(PredictionUnit &pu, Mv* MvPred, int& nbPred)
+void PU::getIntraBCMVPsEncOnly(PredictionUnit &pu, Mv* MvPred, int& nbPred)   //nbPred传入值为0
 {
 
-  //-- Get Spatial MV
+  //-- Get Spatial MV (空域MV)
   Position posLT = pu.Y().topLeft();
   Position posRT = pu.Y().topRight();
   Position posLB = pu.Y().bottomLeft();
 
   unsigned int uiLeft = 0, uiAbove = 0;
 
-  //left
+  //left,找到当前pu的左边
   const PredictionUnit *neibLeftPU = NULL;
-  neibLeftPU = pu.cs->getPURestricted(posLB.offset(-1, 0), pu, pu.cs->chType);
+  neibLeftPU = pu.cs->getPURestricted(posLB.offset(-1, 0), pu, pu.cs->chType);   //为了限制pos和pu是否为同一slice，如果相同，返回pu，否则返回nullptr
   uiLeft = (neibLeftPU) ? neibLeftPU->cu->ibc : 0;
 
-  if (uiLeft)
+  if (uiLeft)   //标记左边pu是否可用 (不可跨slice并且两个pu的cs不可相同)
   {
     MvPred[nbPred++] = neibLeftPU->bv;
-    if (getDerivedBV(pu, MvPred[nbPred - 1], MvPred[nbPred]))
+    if (getDerivedBV(pu, MvPred[nbPred - 1], MvPred[nbPred]))   //根据左边PU->bv，推导MvPred[nbPred]. 差值 = refPU->bv。其中refPU是pu.lumapos()根据左边pu->bv偏移得到
       nbPred++;
   }
 
@@ -2062,14 +2062,14 @@ void PU::getIntraBCMVPsEncOnly(PredictionUnit &pu, Mv* MvPred, int& nbPred)
   neibAbovePU = pu.cs->getPURestricted(posRT.offset(0, -1), pu, pu.cs->chType);
   uiAbove = (neibAbovePU) ? neibAbovePU->cu->ibc : 0;
 
-  if (uiAbove)
+  if (uiAbove)   //标记上方pu是否可用 (不可跨slice并且两个pu的cs不可相同)
   {
     MvPred[nbPred++] = neibAbovePU->bv;
     if (getDerivedBV(pu, MvPred[nbPred - 1], MvPred[nbPred]))
       nbPred++;
   }
 
-  // Below Left predictor search
+  // Below Left predictor search（左下PU）
   const PredictionUnit *neibBelowLeftPU = NULL;
   neibBelowLeftPU = pu.cs->getPURestricted(posLB.offset(-1, 1), pu, pu.cs->chType);
   unsigned int uiBelowLeft = (neibBelowLeftPU) ? neibBelowLeftPU->cu->ibc : 0;
@@ -2082,7 +2082,7 @@ void PU::getIntraBCMVPsEncOnly(PredictionUnit &pu, Mv* MvPred, int& nbPred)
   }
 
 
-  // Above Right predictor search
+  // Above Right predictor search（右上）
   const PredictionUnit *neibAboveRightPU = NULL;
   neibAboveRightPU = pu.cs->getPURestricted(posRT.offset(1, -1), pu, pu.cs->chType);
   unsigned int uiAboveRight = (neibAboveRightPU) ? neibAboveRightPU->cu->ibc : 0;
@@ -2095,7 +2095,7 @@ void PU::getIntraBCMVPsEncOnly(PredictionUnit &pu, Mv* MvPred, int& nbPred)
   }
 
 
-  // Above Left predictor search
+  // Above Left predictor search（左上）
   const PredictionUnit *neibAboveLeftPU = NULL;
   neibAboveLeftPU = pu.cs->getPURestricted(posLT.offset(-1, -1), pu, pu.cs->chType);
   unsigned int uiAboveLeft = (neibAboveLeftPU) ? neibAboveLeftPU->cu->ibc : 0;
@@ -2124,10 +2124,10 @@ bool PU::getDerivedBV(PredictionUnit &pu, const Mv& currentMv, Mv& derivedMv)
   }
 
   const PredictionUnit *neibRefPU = NULL;
-  neibRefPU = pu.cs->getPURestricted(pu.lumaPos().offset(offsetX, offsetY), pu, pu.cs->chType);
+  neibRefPU = pu.cs->getPURestricted(pu.lumaPos().offset(offsetX, offsetY), pu, pu.cs->chType);   //根据currentMv得到参考pu
 
   bool isIBC = (neibRefPU) ? neibRefPU->cu->ibc : 0;
-  if (isIBC)
+  if (isIBC)   //标记参考pu是否可用(不可跨slice并且两个pu的cs不可相同)
   {
     derivedMv = neibRefPU->bv;
     derivedMv += currentMv;

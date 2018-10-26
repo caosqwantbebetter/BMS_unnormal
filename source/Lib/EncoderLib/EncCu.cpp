@@ -2371,7 +2371,7 @@ void EncCu::xCheckRDCostIntraBC(CodingStructure *&tempCS, CodingStructure *&best
   pu.intraDir[0] = DC_IDX; // set intra pred for ibc block。对ibc block设置帧内预测模式
   pu.intraDir[1] = PLANAR_IDX; // set intra pred for ibc block
 
-  pu.interDir = 1; // use list 0 for IBC mode。IBC模式需要使用list 0，后向预测？？？？？
+  pu.interDir = 1; // use list 0 for IBC mode
   pu.refIdx[REF_PIC_LIST_0] = pu.cs->slice->getNumRefIdx(REF_PIC_LIST_0) - 1; // last idx in the list
 
 #if JVET_K0076_CPR_DT

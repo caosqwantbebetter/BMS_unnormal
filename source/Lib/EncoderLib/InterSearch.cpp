@@ -955,10 +955,10 @@ int InterSearch::xIntraBCSearchMVChromaRefine(PredictionUnit& pu,
 
 static unsigned int MergeCandLists(Mv *dst, unsigned int dn, Mv *src, unsigned int sn)
 {
-  for (unsigned int cand = 0; cand < sn && dn<IBC_NUM_CANDIDATES; cand++)
+  for (unsigned int cand = 0; cand < sn && dn<IBC_NUM_CANDIDATES; cand++)   //Maxnum of candidates to store/tests值为64
   {
     bool found = false;
-    for (int j = 0; j<dn; j++)
+    for (int j = 0; j<dn; j++)   //对src中的每个bv，在dst中查找
     {
       if (src[cand] == dst[j])
       {
@@ -967,7 +967,7 @@ static unsigned int MergeCandLists(Mv *dst, unsigned int dn, Mv *src, unsigned i
       }
     }
 
-    if (!found)
+    if (!found)   //如果dst中没有找到src[cand]，插入到dst
     {
       dst[dn] = src[cand];
       dn++;
@@ -1006,7 +1006,7 @@ void InterSearch::xIntraPatternSearch(PredictionUnit& pu, IntTZSearchStruct&  cS
   Mv      cMVCand[CHROMA_REFINEMENT_CANDIDATES];
 
 
-  for (int iCand = 0; iCand < CHROMA_REFINEMENT_CANDIDATES; iCand++)
+  for (int iCand = 0; iCand < CHROMA_REFINEMENT_CANDIDATES; iCand++)   //BV有8 candidates to choose from
   {
     uiSadBestCand[iCand] = std::numeric_limits<Distortion>::max();
     cMVCand[iCand].set(0, 0);
@@ -1026,12 +1026,12 @@ void InterSearch::xIntraPatternSearch(PredictionUnit& pu, IntTZSearchStruct&  cS
     Distortion uiTempSadBest = 0;
 
     int srLeft = iSrchRngHorLeft, srRight = iSrchRngHorRight, srTop = iSrchRngVerTop, srBottom = iSrchRngVerBottom;
-
+    
     if (iRoiWidth>8 || iRoiHeight>8)
     {
       m_uiNumBVs = 0;
     }
-    else if (iRoiWidth + iRoiHeight == 16)
+    else if (iRoiWidth + iRoiHeight == 16)   //lumaArea如果小于8*8,
     {
       m_uiNumBVs = m_uiNumBV16s;
     }
@@ -1039,7 +1039,7 @@ void InterSearch::xIntraPatternSearch(PredictionUnit& pu, IntTZSearchStruct&  cS
     Mv cMvPredEncOnly[16];
     int nbPreds = 0;
     PU::getIntraBCMVPsEncOnly(pu, cMvPredEncOnly, nbPreds);
-    m_uiNumBVs = MergeCandLists(m_acBVs, m_uiNumBVs, cMvPredEncOnly, nbPreds);
+    m_uiNumBVs = MergeCandLists(m_acBVs, m_uiNumBVs, cMvPredEncOnly, nbPreds);   //将cMvPredEncOnly[]中的bv合并到m_acBVs中
 
     for (unsigned int cand = 0; cand < m_uiNumBVs; cand++)
     {
@@ -1335,13 +1335,13 @@ void InterSearch::xIntraBlockCopyEstimation(PredictionUnit& pu, PelUnitBuf& orig
         {
           rcMv = bv;
           ruiCost = p->second;
-          buffered = true;   //如果block vector的distortion比入口传进来的ruicost小，用buffered标记
+          buffered = true;   //如果history中有bv对应的distortion比ruicost小，用buffered标记
         }
       }
     }
   }
 
-  if (!buffered)   //如果block vector的cost没有将传入ruicost替换，需要搜索
+  if (!buffered)   //如果bv的cost大于ruicost，需要进行搜索
   {
     Mv        cMvSrchRngLT;   //LeftTop
     Mv        cMvSrchRngRB;   //RightBottom
@@ -1373,7 +1373,9 @@ void InterSearch::xIntraBlockCopyEstimation(PredictionUnit& pu, PelUnitBuf& orig
 #endif
     cStruct.subShiftMode = 0; // used by intra pattern search function
 
-                              // assume that intra BV is integer-pel precision，进行整像素搜索
+                              // assume that intra BV is integer-pel precision，
+
+    //设置rcMvSrchRngRB和cMvSrchRngRB进行setHor(),setVer()
     xSetIntraSearchRange(pu, cMvPred, pu.lwidth(), pu.lheight(), localSearchRangeX, localSearchRangeY, cMvSrchRngLT, cMvSrchRngRB);
 
     // disable weighted prediction
@@ -1483,11 +1485,11 @@ bool InterSearch::predIntraBCSearch(CodingUnit& cu, Partitioner& partitioner, co
     int iBvpNum = 2;
     int bvpIdxBest = 0;
     cMv.setZero();
-    Distortion cost = 0;
+    Distortion cost = 0; 
 
     if (m_pcEncCfg->getIBCHashSearch())   //从配置中读IBCHashSearch为真时，才可用hash-based seach
     {
-      //如果发现多个参考块和当前块匹配with具有相同的hash key，则计算每个候选block vector的成本时选择最小成本，bvpIdxBest标记索引
+      //在当前pu下，target block匹配的cand[]和传入的cMvPred[]中遍历，选择cost最小的参考(bvpIdxBest) & mv(cMv)
       xxIntraBlockCopyHashSearch(pu, cMvPred, iBvpNum, cMv, bvpIdxBest, ibcHashMap);
     }
 
@@ -1596,8 +1598,8 @@ bool InterSearch::predIntraBCSearch(CodingUnit& cu, Partitioner& partitioner, co
   return true;
 }
 
-
-//mvPred是传进来的mv数组，但是函数首先进行HashMatch匹配，只剩余candPos中与每个block可以完全匹配的参考，然后对
+//mvPred是传进来的mv数组，但是函数首先进行HashMatch匹配，只剩余candPos中与每个block可以完全匹配的参考
+//然后对candPos进行遍历，对每个参考在2个mvPred中选择，最终选择cost最小的参考&mv
 void InterSearch::xxIntraBlockCopyHashSearch(PredictionUnit& pu, Mv* mvPred, int numMvPred, Mv &mv, int& idxMvPred, IbcHashMap& ibcHashMap)
 {
   mv.setZero();

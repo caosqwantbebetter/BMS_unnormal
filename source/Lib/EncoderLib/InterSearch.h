@@ -471,7 +471,7 @@ public:
   );
   void xEncodeInterResidualQT     (CodingStructure &cs, Partitioner &partitioner, const ComponentID &compID);
   void xEstimateInterResidualQT   (CodingStructure &cs, Partitioner &partitioner, Distortion *puiZeroDist = NULL
-#if JVET_K0076_CPR_DT
+#if JVET_ K0076_CPR_DT
     , const bool luma = true, const bool chroma = true
 #endif
   );
